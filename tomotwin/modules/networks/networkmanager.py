@@ -98,6 +98,9 @@ class NetworkManager:
         else:
             modelclass = NetworkManager.network_identifier_map[identifier]
             config = configuration["network_config"]
+            # remove "checkpoint" entry from config if it exists as this is only needed for fine-tuning
+            if "fine_tune_checkpoint" in config:
+                del config["fine_tune_checkpoint"]
             if "groups" in config:
                 '''
                 This can be removed at some point. I only keept it here to make it compatible with older models.
@@ -110,7 +113,7 @@ class NetworkManager:
             return model
 
     @staticmethod
-    def load_network_from_checkpoint(checkpoint: str) -> TorchModel:
+    def load_checkpoint_for_finetuning(checkpoint: str) -> TorchModel:
         """
         Creates new network using the configuration from the checkpoint, then loads the model state dict into the new network.
         """
@@ -121,4 +124,4 @@ class NetworkManager:
         model_.load_state_dict(ckpt["model_state_dict"])
         print(f"Successfully loaded model from {checkpoint}")
         model.set_model(model_)
-        return model
+        return model, ckpt["tomotwin_config"]["network_config"]

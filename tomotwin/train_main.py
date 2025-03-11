@@ -325,10 +325,12 @@ def _main_():
     # Setup network
     ########################
     config["distance"] = distance.name()
-    if "checkpoint" in config["network_config"]:
+    if "fine_tune_checkpoint" in config["network_config"]:
         if not len(config["network_config"]) == 1:
             raise ValueError("If 'checkpoint' is given, no other arguments can be specified in 'network_config'!")
-        network = nw.load_network_from_checkpoint(config["network_config"]["checkpoint"])
+        network, original_network_config = nw.load_checkpoint_for_finetuning(config["network_config"]["fine_tune_checkpoint"])
+        original_network_config["fine_tune_checkpoint"] = config["network_config"]["fine_tune_checkpoint"]
+        config["network_config"] = original_network_config
     else:
         network = nw.create_network(config)
 
