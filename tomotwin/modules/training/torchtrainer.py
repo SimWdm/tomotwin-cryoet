@@ -57,6 +57,7 @@ class TorchTrainer(Trainer):
         weight_decay: float = 0,
         patience: int = None,
         save_epoch_seperately: bool = False,
+        check_val_every_n_epoch: int = 1,
     ):
         """
         :param epochs: Number of epochs
@@ -97,6 +98,7 @@ class TorchTrainer(Trainer):
         self.model = self.network.get_model()
         self.checkpoint = checkpoint
         self.save_epoch_seperately = save_epoch_seperately
+        self.check_val_every_n_epoch = check_val_every_n_epoch
         self.f1_improved = False
         self.loss_improved = False
 
@@ -417,8 +419,9 @@ class TorchTrainer(Trainer):
 
             print(f"Epoch: {epoch + 1}/{self.epochs} - Training Loss: {train_loss:.4f}")
             self.writer.add_scalar("Loss/train", train_loss, epoch)
-
-            self.validate(test_loader=test_loader)
+            
+            if (epoch + 1) % self.check_val_every_n_epoch == 0:
+                self.validate(test_loader=test_loader)
 
             self.writer.flush()
 

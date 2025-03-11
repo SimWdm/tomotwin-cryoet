@@ -371,6 +371,7 @@ def _main_():
         weight_decay=config["train_config"]["weight_decay"],
         patience=config["train_config"]["patience"],
         save_epoch_seperately=tconf.save_after_improvement,
+        check_val_every_n_epoch=config["train_config"]["check_val_every_n_epoch"],
     )
     trainer.set_seed(seed)
     config["window_size"] = tuple(train_ds.get_triplet_dimension())
