@@ -29,6 +29,9 @@ from tomotwin.modules.inference.boxer import Boxer, SlidingWindowBoxer
 from tomotwin.modules.inference.embedor import TorchEmbedorDistributed, Embedor, TorchEmbedor
 from tomotwin.modules.inference.volumedata import FileNameVolumeDataset
 
+import torch._dynamo
+torch._dynamo.config.suppress_errors = True
+
 #import torch._dynamo
 #torch._dynamo.config.suppress_errors = True
 
