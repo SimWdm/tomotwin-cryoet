@@ -376,6 +376,19 @@ class TorchTrainer(Trainer):
         training_loss = np.mean(running_loss)
         self.last_loss = training_loss
         return training_loss
+    
+    def validate(self, test_loader: DataLoader) -> Tuple[float, float]:
+        # Validation
+        if test_loader is not None:
+            current_val_loss = self.validation_loss(test_loader)
+            current_val_f1 = self.classification_f1_score(test_loader=test_loader)
+            self.scheduler.step(current_val_loss)
+            print(f"Validation Loss: {current_val_loss:.4f}.")
+            print(f"Validation F1 Score: {current_val_f1:.4f}.")
+            self.writer.add_scalar("Loss/validation", current_val_loss, self.current_epoch)
+            self.writer.add_scalar("F1/validation", current_val_f1, self.current_epoch)
+            self.save_best_loss(current_val_loss, self.current_epoch)
+            self.save_best_f1(current_val_f1, self.current_epoch)
 
     def train(self) -> nn.Module:
         """
@@ -386,6 +399,9 @@ class TorchTrainer(Trainer):
             raise RuntimeError("Training data is not set")
 
         train_loader, test_loader = self.get_train_test_dataloader()
+        self.current_epoch = -1
+        
+        self.validate(test_loader=test_loader)
 
         # Training Loop
         for epoch in tqdm(
@@ -402,17 +418,7 @@ class TorchTrainer(Trainer):
             print(f"Epoch: {epoch + 1}/{self.epochs} - Training Loss: {train_loss:.4f}")
             self.writer.add_scalar("Loss/train", train_loss, epoch)
 
-            # Validation
-            if test_loader is not None:
-                current_val_loss = self.validation_loss(test_loader)
-                current_val_f1 = self.classification_f1_score(test_loader=test_loader)
-                self.scheduler.step(current_val_loss)
-                print(f"Validation Loss: {current_val_loss:.4f}.")
-                print(f"Validation F1 Score: {current_val_f1:.4f}.")
-                self.writer.add_scalar("Loss/validation", current_val_loss, epoch)
-                self.writer.add_scalar("F1/validation", current_val_f1, epoch)
-                self.save_best_loss(current_val_loss, epoch)
-                self.save_best_f1(current_val_f1, epoch)
+            self.validate(test_loader=test_loader)
 
             self.writer.flush()
 
