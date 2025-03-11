@@ -194,6 +194,7 @@ def make_embeddor(conf: EmbedConfiguration, rank: int, world_size: int) -> Embed
             workers=4,
         )
     else:
+        import pdb; pdb.set_trace()
         embedor = TorchEmbedorDistributed(
             weightspth=conf.model_path,
             batchsize=conf.batchsize,

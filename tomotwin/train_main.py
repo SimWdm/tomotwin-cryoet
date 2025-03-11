@@ -55,7 +55,9 @@ except ModuleNotFoundError:
 
 
 def get_augmentations(
-    aug_train_shift_distance: int = 2, use_pdb_as_anchor: bool = True
+    augs: list = None,
+    probs: list = None,
+    use_pdb_as_anchor: bool = True
 ) -> Tuple[AugmentationPipeline, AugmentationPipeline]:
     """
     :param aug_train_shift_distance: Augmentation shifts
@@ -77,29 +79,31 @@ def get_augmentations(
                 0.3,
             ],
         )
-    aug_volumes = AugmentationPipeline(
-        augs=[
-            VoxelDropout(ratio=(0.05, 0.2)),
-            RotateFull(axes=(1, 2)),
-            Shift(
-                axis=0,
-                min_shift=-aug_train_shift_distance,
-                max_shift=aug_train_shift_distance,
-            ),
-            Shift(
-                axis=1,
-                min_shift=-aug_train_shift_distance,
-                max_shift=aug_train_shift_distance,
-            ),
-            Shift(
-                axis=2,
-                min_shift=-aug_train_shift_distance,
-                max_shift=aug_train_shift_distance,
-            ),
-            AddNoise(sigma=(0, 0.3)),
-        ],
-        probs=[0.3, 0.3, 0.3, 0.3, 0.3, 0.9],
-    )
+    augs = [eval(aug["name"])(aug["args"]) for aug in augs]
+    aug_volumes = AugmentationPipeline(augs=augs, probs=probs)
+    # aug_volumes = AugmentationPipeline(
+    #     augs=[
+    #         VoxelDropout(ratio=(0.05, 0.2)),
+    #         RotateFull(axes=(1, 2)),
+    #         Shift(
+    #             axis=0,
+    #             min_shift=-aug_train_shift_distance,
+    #             max_shift=aug_train_shift_distance,
+    #         ),
+    #         Shift(
+    #             axis=1,
+    #             min_shift=-aug_train_shift_distance,
+    #             max_shift=aug_train_shift_distance,
+    #         ),
+    #         Shift(
+    #             axis=2,
+    #             min_shift=-aug_train_shift_distance,
+    #             max_shift=aug_train_shift_distance,
+    #         ),
+    #         AddNoise(sigma=(0, 0.3)),
+    #     ],
+    #     probs=[0.3, 0.3, 0.3, 0.3, 0.3, 0.9],
+    # )
     if aug_anchor is None:
         aug_anchor = aug_volumes
     return aug_anchor, aug_volumes
@@ -260,12 +264,12 @@ def _main_():
 
     pth_log_out = os.path.join(tconf.output_path, "out.txt")
     pth_log_err = os.path.join(tconf.output_path, "err.txt")
-    print("Redirecting stdout to", pth_log_out)
-    print("Redirecting stderr to", pth_log_err)
-    f = open(pth_log_out, "a", encoding="utf-8")
-    sys.stdout = f
-    f = open(pth_log_err, "a", encoding="utf-8")
-    sys.stderr = f
+    # print("Redirecting stdout to", pth_log_out)
+    # print("Redirecting stderr to", pth_log_err)
+    # f = open(pth_log_out, "a", encoding="utf-8")
+    # sys.stdout = f
+    # f = open(pth_log_err, "a", encoding="utf-8")
+    # sys.stderr = f
     print("TomoTwin Version:", version("tomotwin-cryoet"))
 
 
@@ -285,14 +289,15 @@ def _main_():
 
     ########################
     # Configure datasets
-    ########################
-
-    aug_args = {"use_pdb_as_anchor": tconf.pdb_path is not None}
-    if "aug_train_shift_distance" in config["train_config"]:
-        print("Use shift:", config["train_config"]["aug_train_shift_distance"])
-        aug_args["aug_train_shift_distance"] = config["train_config"][
-            "aug_train_shift_distance"
-        ]
+    #######################
+    
+    aug_args = config["augmentation_config"]
+    aug_args["use_pdb_as_anchor"] = tconf.pdb_path is not None
+    # if "aug_train_shift_distance" in config["train_config"]:
+    #     print("Use shift:", config["train_config"]["aug_train_shift_distance"])
+    #     aug_args["aug_train_shift_distance"] = config["train_config"][
+    #         "aug_train_shift_distance"
+    #     ]
 
     aug_anchor, aug_volumes = get_augmentations(**aug_args)
 
