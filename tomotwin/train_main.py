@@ -79,7 +79,7 @@ def get_augmentations(
                 0.3,
             ],
         )
-    augs = [eval(aug["name"])(aug["args"]) for aug in augs]
+    augs = [eval(aug["name"])(**aug["args"]) for aug in augs]
     aug_volumes = AugmentationPipeline(augs=augs, probs=probs)
     # aug_volumes = AugmentationPipeline(
     #     augs=[
