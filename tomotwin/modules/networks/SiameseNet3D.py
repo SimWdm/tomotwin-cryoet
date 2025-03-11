@@ -244,3 +244,7 @@ class SiameseNet3D(TorchModel):
 
     def get_model(self) -> nn.Module:
         return self.model
+    
+    def set_model(self, model: nn.Module):
+        print("Setting model")
+        self.model = model

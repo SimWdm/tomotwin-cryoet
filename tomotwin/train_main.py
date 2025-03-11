@@ -203,7 +203,6 @@ def generate_triplets(
                 path_volume=tconf.validvolumes, mask_volumes="**/*.mrc"
             )
         test_triplets = tripletprov.get_triplets()
-
     return train_triplets, test_triplets
 
 
@@ -326,7 +325,12 @@ def _main_():
     # Setup network
     ########################
     config["distance"] = distance.name()
-    network = nw.create_network(config)
+    if "checkpoint" in config["network_config"]:
+        if not len(config["network_config"]) == 1:
+            raise ValueError("If 'checkpoint' is given, no other arguments can be specified in 'network_config'!")
+        network = nw.load_network_from_checkpoint(config["network_config"]["checkpoint"])
+    else:
+        network = nw.create_network(config)
 
     ########################
     # Setup miners and loss

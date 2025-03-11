@@ -12,6 +12,7 @@ may affect the distribution and modification of this software.
 """
 
 import json
+import torch
 from typing import Dict
 
 from tomotwin.modules.networks.SiameseNet3D import SiameseNet3D
@@ -80,6 +81,7 @@ class NetworkManager:
             NetworkManager.check_format(config)
 
         return config
+    
 
     @staticmethod
     def create_network(configuration: Dict) -> TorchModel:
@@ -106,3 +108,17 @@ class NetworkManager:
             model = modelclass(**config)
 
             return model
+
+    @staticmethod
+    def load_network_from_checkpoint(checkpoint: str) -> TorchModel:
+        """
+        Creates new network using the configuration from the checkpoint, then loads the model state dict into the new network.
+        """
+        ckpt = torch.load(checkpoint)
+        tomotwin_config = ckpt["tomotwin_config"]
+        model = NetworkManager.create_network(tomotwin_config)
+        model_ = model.get_model()
+        model_.load_state_dict(ckpt["model_state_dict"])
+        print(f"Successfully loaded model from {checkpoint}")
+        model.set_model(model_)
+        return model
