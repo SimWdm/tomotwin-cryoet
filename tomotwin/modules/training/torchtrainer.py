@@ -385,6 +385,7 @@ class TorchTrainer(Trainer):
             current_val_loss = self.validation_loss(test_loader)
             current_val_f1 = self.classification_f1_score(test_loader=test_loader)
             self.scheduler.step(current_val_loss)
+            self.writer.add_scalar("Learning rate", self.optimizer.param_groups[0]["lr"], self.current_epoch)
             print(f"Validation Loss: {current_val_loss:.4f}.")
             print(f"Validation F1 Score: {current_val_f1:.4f}.")
             self.writer.add_scalar("Loss/validation", current_val_loss, self.current_epoch)
