@@ -29,6 +29,8 @@ from tomotwin.modules.inference.boxer import Boxer, SlidingWindowBoxer
 from tomotwin.modules.inference.embedor import TorchEmbedorDistributed, Embedor, TorchEmbedor
 from tomotwin.modules.inference.volumedata import FileNameVolumeDataset
 
+#import torch._dynamo
+#torch._dynamo.config.suppress_errors = True
 
 def sliding_window_embedding(
     tomo: np.array, boxer: Boxer, embedor: Embedor
@@ -194,7 +196,6 @@ def make_embeddor(conf: EmbedConfiguration, rank: int, world_size: int) -> Embed
             workers=4,
         )
     else:
-        import pdb; pdb.set_trace()
         embedor = TorchEmbedorDistributed(
             weightspth=conf.model_path,
             batchsize=conf.batchsize,
