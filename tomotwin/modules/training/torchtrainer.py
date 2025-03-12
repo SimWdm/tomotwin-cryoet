@@ -94,7 +94,7 @@ class TorchTrainer(Trainer):
         self.checkpoint = None
         self.start_epoch = 0
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.network.init_weights()
+        #self.network.init_weights()
         self.model = self.network.get_model()
         self.checkpoint = checkpoint
         self.save_epoch_seperately = save_epoch_seperately

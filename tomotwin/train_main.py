@@ -334,6 +334,7 @@ def _main_():
         config["network_config"] = original_network_config
     else:
         network = nw.create_network(config)
+        network.init_weights()
 
     ########################
     # Setup miners and loss
@@ -364,7 +365,7 @@ def _main_():
         criterion=LossPyML(
             loss_func=loss_func, miner=miner, only_negative_labels=only_negative_labels
         ),
-        workers=12,
+        workers=32,
         log_dir=os.path.join(tconf.output_path, "tensorboard"),
         training_data=train_ds,
         test_data=test_ds,
