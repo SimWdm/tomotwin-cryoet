@@ -34,6 +34,7 @@ class FilenameMatchingTripletProviderNoPDB(TripletProvider):
         path_volume: str,
         mask_volumes="*.mrc",
         shuffle: bool=True,
+        exclude_classes_from_anchors: List[str]=[]
     ):
         """
         :param path_pdb: Path to folder with pdb files
@@ -45,6 +46,7 @@ class FilenameMatchingTripletProviderNoPDB(TripletProvider):
         self.path_volume = path_volume
         self.mask_volumes = mask_volumes
         self.shuffle = shuffle
+        self.exclude_classes_from_anchors = exclude_classes_from_anchors
 
 
     def get_triplets(self) -> List[FilePathTriplet]:
@@ -78,6 +80,13 @@ class FilenameMatchingTripletProviderNoPDB(TripletProvider):
         unique_labels = np.unique(lbl_arr)
         triplets = []
         for lbl in tqdm.tqdm(unique_labels,"Generate triplets (no pdb)"):
+            # check if lbl is upper case
+            if not lbl.upper() == lbl:
+                raise ValueError(f"Label {lbl} is not uppercase")
+            
+            if lbl in self.exclude_classes_from_anchors:
+                continue
+            
             index_same_lbl = np.where(lbl_arr == lbl)[0]
             index_different_lbl = np.where(lbl_arr != lbl)[0]
             if len(index_same_lbl) == 1:

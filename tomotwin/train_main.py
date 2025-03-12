@@ -175,7 +175,7 @@ def generate_triplets(
         )
     else:
         tripletprov = FilenameMatchingTripletProviderNoPDB(
-            path_volume=tconf.volume_path, mask_volumes="**/*.mrc"
+            path_volume=tconf.volume_path, mask_volumes="**/*.mrc", exclude_classes_from_anchors=tconf.exclude_classes_from_anchors
         )
 
     master_list = tripletprov.get_triplets()
@@ -257,8 +257,13 @@ def _main_():
 
     check_for_updates()
 
+    ########################
+    # Load config
+    ########################
     tconf = ui.get_training_configuration()
-
+    nw = NetworkManager()
+    config = nw.load_configuration(tconf.netconfig)
+    
     os.makedirs(tconf.output_path, exist_ok=True)
 
     pth_log_out = os.path.join(tconf.output_path, "out.txt")
@@ -275,16 +280,12 @@ def _main_():
     ########################
     # Generate Triplets
     ########################
+    tconf.exclude_classes_from_anchors = [x.upper() for x in config["train_config"]["exclude_classes_from_anchors"]]
     train_triplets, test_triplets = generate_triplets(tconf)
 
     print("Number of train triplets:", len(train_triplets))
     print("Number of validation triplets:", len(test_triplets))
 
-    ########################
-    # Load config
-    ########################
-    nw = NetworkManager()
-    config = nw.load_configuration(tconf.netconfig)
 
     ########################
     # Configure datasets
