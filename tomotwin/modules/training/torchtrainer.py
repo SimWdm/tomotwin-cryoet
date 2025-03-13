@@ -127,7 +127,7 @@ class TorchTrainer(Trainer):
             self.load_checkpoint(checkpoint=self.checkpoint)
 
         self.model = nn.DataParallel(self.model)
-
+        
     def set_seed(self, seed: int):
         """
         Set the seed for random number generators
@@ -351,6 +351,17 @@ class TorchTrainer(Trainer):
             f"Restart from checkpoint. Epoch: {self.start_epoch}, Training loss: {self.last_loss}, Validation loss: {self.best_val_loss}"
         )
 
+    def check_gradients_for_nan(self):
+        total_nans = 0
+        for p in self.model.parameters():
+            if p.grad is not None:
+                nan_count = torch.isnan(p.grad).sum().item()
+                total_nans += nan_count
+        if total_nans > 0:
+            print(f"WARNING: Found {total_nans} NaNs in gradients! Consider reducing the scaler's init_scale.")
+        return total_nans
+
+
     def epoch(self, train_loader: DataLoader) -> float:
         """
         Runs a single epoch
@@ -358,21 +369,22 @@ class TorchTrainer(Trainer):
         :return: Training loss after the epoch
         """
 
-        scaler = GradScaler()
+        scaler = GradScaler(init_scale=1024.)
         running_loss = []
         self.model.train()
         t = tqdm(train_loader, desc="Training", leave=False)
-        for _, batch in enumerate(t):
-            self.optimizer.zero_grad()
-
+        for _, batch in enumerate(t):            
             loss = self.run_batch(batch)
-            loss_np = loss.cpu().detach().numpy()
+            loss_np = loss.clone().cpu().detach().numpy()
             running_loss.append(loss_np)
-            scaler.scale(loss).backward()
+        
+            loss = scaler.scale(loss)
+            loss.backward()
+            self.check_gradients_for_nan()
             scaler.step(self.optimizer)
             scaler.update()
+            
             desc_t = f"Training (loss: {np.mean(running_loss[-20:]):.4f}) "
-
             t.set_description(desc=desc_t)
 
         training_loss = np.mean(running_loss)

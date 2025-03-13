@@ -365,7 +365,7 @@ def _main_():
         criterion=LossPyML(
             loss_func=loss_func, miner=miner, only_negative_labels=only_negative_labels
         ),
-        workers=32,
+        workers=16,
         log_dir=os.path.join(tconf.output_path, "tensorboard"),
         training_data=train_ds,
         test_data=test_ds,
