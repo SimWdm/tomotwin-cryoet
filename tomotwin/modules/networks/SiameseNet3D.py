@@ -1,3 +1,4 @@
+#%%
 """
 Copyright (c) 2022 MPI-Dortmund
 SPDX-License-Identifier: MPL-2.0
@@ -18,6 +19,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from tomotwin.modules.networks.torchmodel import TorchModel
+from tomotwin.modules.networks.SiameseNet3DDecoder import SiameseNet3DDecoder
 
 
 class ResnetBlock(nn.Module):
@@ -88,6 +90,7 @@ class SiameseNet3D(TorchModel):
             dropout: float = 0.5,
             repeat_layers=0,
             gem_pooling = None,
+            init_decoder=False,
         ):
             super().__init__()
             norm_func = self.make_norm(norm, 64)
@@ -128,6 +131,15 @@ class SiameseNet3D(TorchModel):
             self.headnet = self._make_headnet(
                 2 * 2 * 2 * 1024, 2048, output_channels, dropout=dropout
             )
+            
+            if init_decoder: # If decoder is True, we will use the SiameseNet3DDecoder
+                self.decoder = SiameseNet3DDecoder(
+                    out_size=37,
+                    out_chans=1,
+                    final_activation=nn.Identity(),
+                    encoder_cat_layer_ids=[0, 1, 2, 3],
+                )
+
 
         @staticmethod
         def _make_conv_layer(in_c: int, out_c: int, norm: nn.Module, padding: int = 0):
@@ -155,33 +167,44 @@ class SiameseNet3D(TorchModel):
             )
             return headnet
 
-        def forward(self, inputtensor):
+        def forward(self, inputtensor, decode: bool = False):
             """
             Forward pass through the network
             :param inputtensor: Input tensor
             """
+            intermediate_features = []
             inputtensor = F.pad(inputtensor, (1, 2, 1, 2, 1, 2))
 
             out = self.conv_layer0(inputtensor)
             out = self.max_pooling(out)
             if self.rep_layers0:
                 out = self.rep_layers0(out)
+            if decode:
+                intermediate_features.append(out)
 
             out = self.conv_layer1(out)
             if self.rep_layers1:
                 out = self.rep_layers1(out)
+            if decode:
+                intermediate_features.append(out)
 
             out = self.conv_layer2(out)
             if self.rep_layers2:
                 out = self.rep_layers2(out)
-
+            if decode:
+                intermediate_features.append(out)
+                
             out = self.conv_layer3(out)
             if self.rep_layers3:
                 out = self.rep_layers3(out)
+            if decode:
+                intermediate_features.append(out)
 
             out = self.conv_layer4(out)
             if self.rep_layers4:
                 out = self.rep_layers4(out)
+            if decode:
+                intermediate_features.append(out)
 
             out = self.adap_max_pool(out)
             # print("P", out.shape)
@@ -189,8 +212,16 @@ class SiameseNet3D(TorchModel):
             out = self.headnet(out)
             out = F.normalize(out, p=2, dim=1)
 
+            if decode:
+                intermediate_features = intermediate_features[::-1]
+                decoder_out = self.decoder(
+                    x=intermediate_features[0], 
+                    cats=intermediate_features[1:],
+                )
+                out = (out, decoder_out)
+                
             return out
-
+        
     """
     Custom 3D convnet, nothing fancy
     """
@@ -221,6 +252,7 @@ class SiameseNet3D(TorchModel):
         dropout: float = 0.5,
         gem_pooling_p: float = 0,
         repeat_layers=0,
+        init_decoder: bool = False,
     ):
         super().__init__()
         norm = self.setup_norm(norm_name, norm_kwargs)
@@ -232,7 +264,8 @@ class SiameseNet3D(TorchModel):
             dropout=dropout,
             repeat_layers=repeat_layers,
             norm=norm,
-            gem_pooling=gem_pooling
+            gem_pooling=gem_pooling,
+            init_decoder=init_decoder,
         )
 
     def init_weights(self):
@@ -244,3 +277,25 @@ class SiameseNet3D(TorchModel):
 
     def get_model(self) -> nn.Module:
         return self.model
+
+
+#%%
+if __name__ == "__main__":
+    # Example usage
+    model = SiameseNet3D(
+        norm_name=SiameseNet3D.NORM_GROUPNORM,
+        norm_kwargs={"num_groups": 32, "eps": 1e-05, "affine": True},
+        output_channels=1,
+        dropout=0.5,
+        gem_pooling_p=0.1,
+        repeat_layers=2,
+        init_decoder=True,
+    )
+    
+    model.init_weights()
+    
+    device = "cuda:0" 
+    model = model.get_model().to(device)
+    
+    x = torch.randn(2, 1, 64, 64, 64, device=model.device)  # Example input tensor
+    output = model(x, decode=True)  # Forward pass with decoding
