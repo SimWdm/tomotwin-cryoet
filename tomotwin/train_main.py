@@ -356,18 +356,19 @@ def _main_():
     ########################
     config["distance"] = distance.name()
 
-    if tconf.train_with_reconstruction_loss:
+    if tconf.train_with_reconstruction_loss and "ttt_checkpoint" not in config["network_config"]:
         print("Setting 'init_decoder' to True in network config.")
         config["network_config"]["init_decoder"] = True
     
     if "ttt_checkpoint" in config["network_config"]:
         if not len(config["network_config"]) == 1:
-            raise Warning(f"'ttt_checkpoint' is set in network_config, other network_config parameters will be ignored!.")
-        network, original_network_config = nw.load_checkpoint_for_finetuning(config["network_config"]["ttt_checkpoint"])
+            raise ValueError(f"'ttt_checkpoint' is set in network_config, other network_config parameters will be ignored!.")
+        network, original_network_config = nw.load_network_from_checkpoint(config["network_config"]["ttt_checkpoint"])
         original_network_config["ttt_checkpoint"] = config["network_config"]["ttt_checkpoint"]
         config["network_config"] = original_network_config
     else:
         network = nw.create_network(config)
+        network.init_weights()
 
     ########################
     # Setup miners and loss
@@ -383,9 +384,16 @@ def _main_():
     ########################
     # Create trainer and start training
     ########################
+    if "ttt_checkpoint" in config["network_config"]:
+        print("'ttt_checkpoint' is set in network_config! Setting 'train_with_reconstruction_loss=True' and 'train_with_triplet_loss'=False in tconf.")
+        tconf.train_with_reconstruction_loss = True
+        tconf.train_with_triplet_loss = False
+    
     only_negative_labels = []
     if "only_negative_labels" in config["train_config"]:
         only_negative_labels = config["train_config"]["only_negative_labels"]
+        
+    import pdb; pdb.set_trace()
     trainer = TorchTrainer(
         epochs=tconf.num_epochs,
         batchsize=int(config["train_config"]["batchsize"]),
@@ -406,6 +414,7 @@ def _main_():
         patience=config["train_config"]["patience"],
         save_epoch_seperately=tconf.save_after_improvement,
         train_with_reconstruction_loss=tconf.train_with_reconstruction_loss,
+        train_with_triplet_loss=tconf.train_with_triplet_loss,
     )
     trainer.set_seed(seed)
     config["window_size"] = tuple(train_ds.get_triplet_dimension())

@@ -58,6 +58,7 @@ class TorchTrainer(Trainer):
         weight_decay: float = 0,
         patience: int = None,
         save_epoch_seperately: bool = False,
+        train_with_triplet_loss: bool = True,
         train_with_reconstruction_loss: bool = False,
     ):
         """
@@ -74,6 +75,7 @@ class TorchTrainer(Trainer):
         self.training_data = training_data
         self.test_data = test_data
         self.patience = patience
+        self.train_with_triplet_loss = train_with_triplet_loss
         self.train_with_reconstruction_loss = train_with_reconstruction_loss
         if self.patience is None:
             self.patience = self.epochs
@@ -97,7 +99,7 @@ class TorchTrainer(Trainer):
         self.checkpoint = None
         self.start_epoch = 0
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.network.init_weights()
+        #self.network.init_weights()
         self.model = self.network.get_model()
         self.checkpoint = checkpoint
         self.save_epoch_seperately = save_epoch_seperately
@@ -255,7 +257,7 @@ class TorchTrainer(Trainer):
 
         return TorchTrainer.calc_avg_f1(pd.DataFrame(anchor_emb), pd.DataFrame(vol_emb))
 
-    def run_batch(self, batch: Dict):
+    def run_batch(self, batch: Dict, mode: str):
         """
         Run inference on one batch.
         :param batch: Dictionary with batch data
@@ -275,7 +277,7 @@ class TorchTrainer(Trainer):
                 
         out = torch.split(out, anchor_vol.shape[0], dim=0)
         
-        try:
+        if mode == "val" or (mode == "train" and self.train_with_triplet_loss):
             triplet_loss = self.criterion(
                 out[0],
                 out[1],
@@ -284,13 +286,11 @@ class TorchTrainer(Trainer):
                 label_positive=batch["label_positive"],
                 label_negative=batch["label_negative"],
             )
-            loss = triplet_loss
-        except Exception as e:
-            print(e)
-            import pdb; pdb.set_trace()
+        elif mode == "train" and not self.train_with_triplet_loss:
+            triplet_loss = torch.tensor(0.0, device=self.device)
+        loss = triplet_loss        
 
-        
-        if self.model.module.decode:
+        if mode == "train" and self.train_with_reconstruction_loss:
             anchor_vol_even = batch["anchor_even"]
             anchor_vol_odd = batch["anchor_odd"]
             full_input = torch.cat([anchor_vol_even], dim=0).to(self.device, non_blocking=True)
@@ -356,7 +356,7 @@ class TorchTrainer(Trainer):
             print("Cant activate validation mode for loss")
         with torch.no_grad():
             for _, batch in enumerate(t):
-                valloss = self.run_batch(batch)["loss"]
+                valloss = self.run_batch(batch, mode="val")["loss"]
                 val_loss.append(valloss.cpu().detach().numpy())
                 desc_t = f"Validation (running loss: {np.mean(val_loss[-20:]):.4f} "
                 t.set_description(desc=desc_t)
@@ -392,7 +392,7 @@ class TorchTrainer(Trainer):
             f"Restart from checkpoint. Epoch: {self.start_epoch}, Training loss: {self.last_loss}, Validation loss: {self.best_val_loss}"
         )
 
-    def epoch(self, train_loader: DataLoader) -> float:
+    def train_epoch(self, train_loader: DataLoader) -> float:
         """
         Runs a single epoch
         :param train_loader: Data loader for training data
@@ -410,7 +410,7 @@ class TorchTrainer(Trainer):
                         
             self.optimizer.zero_grad()
 
-            losses = self.run_batch(batch)
+            losses = self.run_batch(batch, mode="train")
             
             loss = losses["loss"]
             
@@ -453,6 +453,9 @@ class TorchTrainer(Trainer):
 
         train_loader, test_loader = self.get_train_test_dataloader()
 
+        self.current_epoch = -1
+        self.validate(test_loader=test_loader)
+        
         # Training Loop
         for epoch in tqdm(
             range(self.start_epoch, self.epochs),
@@ -470,7 +473,7 @@ class TorchTrainer(Trainer):
                 else:
                     self.model.decode = True
 
-            train_losses = self.epoch(train_loader=train_loader)
+            train_losses = self.train_epoch(train_loader=train_loader)
             train_loss = train_losses["train_loss"]
 
             print(f"Epoch: {epoch + 1}/{self.epochs} - Training Loss: {train_loss:.4f}")
@@ -490,17 +493,9 @@ class TorchTrainer(Trainer):
                 self.model.module.decode = False
             else:
                 self.model.decode = False
-                    
+            
             if test_loader is not None:
-                current_val_loss = self.validation_loss(test_loader)
-                current_val_f1 = self.classification_f1_score(test_loader=test_loader)
-                self.scheduler.step(current_val_loss)
-                print(f"Validation Loss: {current_val_loss:.4f}.")
-                print(f"Validation F1 Score: {current_val_f1:.4f}.")
-                self.writer.add_scalar("Loss/validation", current_val_loss, epoch)
-                self.writer.add_scalar("F1/validation", current_val_f1, epoch)
-                self.save_best_loss(current_val_loss, epoch)
-                self.save_best_f1(current_val_f1, epoch)
+                self.validate(test_loader=test_loader)
 
             self.writer.flush()
 
@@ -510,6 +505,19 @@ class TorchTrainer(Trainer):
                 )
 
         return self.model
+    
+    def validate(self, test_loader: DataLoader) -> Tuple[float, float]:
+        # Validation
+        if test_loader is not None:
+            current_val_loss = self.validation_loss(test_loader)
+            current_val_f1 = self.classification_f1_score(test_loader=test_loader)
+            self.scheduler.step(current_val_loss)
+            print(f"Validation Loss: {current_val_loss:.4f}.")
+            print(f"Validation F1 Score: {current_val_f1:.4f}.")
+            self.writer.add_scalar("Loss/validation", current_val_loss, self.current_epoch)
+            self.writer.add_scalar("F1/validation", current_val_f1, self.current_epoch)
+            self.save_best_loss(current_val_loss, self.current_epoch)
+            self.save_best_f1(current_val_f1, self.current_epoch)
 
     def set_training_data(self, training_data: TripletDataset) -> None:
         """
