@@ -31,7 +31,7 @@ class TrainingArgParseUI(TrainingUI):
         self.checkpoint = None
         self.distance = None
         self.train_with_reconstruction_loss = False  # NEW
-        self.backprop_through_triplet_loss = True  # NEW
+        self.train_with_triplet_loss = True  # NEW
 
     def create_parser(self) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(
@@ -139,7 +139,7 @@ class TrainingArgParseUI(TrainingUI):
         self.validvolumes = args.validvolumes
         self.save_after_improvement = args.save_after_improvement
         self.train_with_reconstruction_loss = args.train_with_reconstruction_loss  
-        self.backprop_through_triplet_loss = args.backprop_through_triplet_loss  
+        self.train_with_triplet_loss = args.train_with_triplet_loss  
 
     def get_training_configuration(self) -> TrainingConfiguration:
         tconf = TrainingConfiguration(
@@ -154,6 +154,6 @@ class TrainingArgParseUI(TrainingUI):
             validvolumes=self.validvolumes,
             save_after_improvement=self.save_after_improvement,
             train_with_reconstruction_loss=self.train_with_reconstruction_loss,  
-            backprop_through_triplet_loss=self.backprop_through_triplet_loss,  
+            train_with_triplet_loss=self.train_with_triplet_loss,  
         )
         return tconf

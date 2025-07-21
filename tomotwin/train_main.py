@@ -362,7 +362,7 @@ def _main_():
     
     if "ttt_checkpoint" in config["network_config"]:
         network = nw.load_network_from_checkpoint(config["network_config"]["ttt_checkpoint"])
-        tconf.backprop_through_triplet_loss = False
+        tconf.train_with_triplet_loss = False
     else:
         network = nw.create_network(config)
 
