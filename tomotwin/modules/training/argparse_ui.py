@@ -114,12 +114,18 @@ class TrainingArgParseUI(TrainingUI):
         )
         
         parser.add_argument(
+            "--train_with_triplet_loss",
+            action='store_true',
+            default=True,
+            help="Train the network with the contrastive triplet loss."
+        )
+        
+        parser.add_argument(
             "--train_with_reconstruction_loss",
             action='store_true',
             default=False,
-            help="Reconstruct the anchor volume after each epoch.",
+            help="Train the network with the reconstruction loss."
         )
-
 
 
         return parser

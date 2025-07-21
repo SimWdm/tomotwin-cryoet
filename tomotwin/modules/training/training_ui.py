@@ -39,6 +39,7 @@ class TrainingConfiguration:
     distance: str
     validvolumes: str
     save_after_improvement: bool
+    train_with_triplet_loss: bool = True
     train_with_reconstruction_loss: bool = False
 
 
