@@ -30,6 +30,7 @@ class TrainingArgParseUI(TrainingUI):
         self.config = None
         self.checkpoint = None
         self.distance = None
+        self.reconstruct_anchor = False  # NEW
 
     def create_parser(self) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(
@@ -110,6 +111,13 @@ class TrainingArgParseUI(TrainingUI):
             default=False,
             help="Save separate model for each epoch.",
         )
+        
+        parser.add_argument(
+            "--reconstruct_anchor",
+            action='store_true',
+            default=False,
+            help="Reconstruct the anchor volume after each epoch.",
+        )
 
 
 
@@ -129,6 +137,7 @@ class TrainingArgParseUI(TrainingUI):
         self.distance = args.distance
         self.validvolumes = args.validvolumes
         self.save_after_improvement = args.save_after_improvement
+        self.reconstruct_anchor = args.reconstruct_anchor  # NEW
 
     def get_training_configuration(self) -> TrainingConfiguration:
         tconf = TrainingConfiguration(
@@ -141,6 +150,7 @@ class TrainingArgParseUI(TrainingUI):
             checkpoint=self.checkpoint,
             distance=self.distance,
             validvolumes=self.validvolumes,
-            save_after_improvement=self.save_after_improvement
+            save_after_improvement=self.save_after_improvement,
+            reconstruct_anchor=self.reconstruct_anchor,  # NEW
         )
         return tconf

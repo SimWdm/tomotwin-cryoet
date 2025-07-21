@@ -26,6 +26,7 @@ from tomotwin.modules.common.preprocess import label_filename
 from tomotwin.modules.common.utils import check_for_updates
 from tomotwin.modules.networks.networkmanager import NetworkManager
 from tomotwin.modules.training.LossPyML import LossPyML
+from tomotwin.modules.training.decoder_losses import cossim_loss
 from tomotwin.modules.training.argparse_ui import (
     TrainingArgParseUI,
     TrainingConfiguration,
@@ -290,14 +291,14 @@ def _main_():
 
     os.makedirs(tconf.output_path, exist_ok=True)
 
-    pth_log_out = os.path.join(tconf.output_path, "out.txt")
-    pth_log_err = os.path.join(tconf.output_path, "err.txt")
-    print("Redirecting stdout to", pth_log_out)
-    print("Redirecting stderr to", pth_log_err)
-    f = open(pth_log_out, "a", encoding="utf-8")
-    sys.stdout = f
-    f = open(pth_log_err, "a", encoding="utf-8")
-    sys.stderr = f
+    #pth_log_out = os.path.join(tconf.output_path, "out.txt")
+    #pth_log_err = os.path.join(tconf.output_path, "err.txt")
+    #print("Redirecting stdout to", pth_log_out)
+    #print("Redirecting stderr to", pth_log_err)
+    #f = open(pth_log_out, "a", encoding="utf-8")
+    #sys.stdout = f
+    #f = open(pth_log_err, "a", encoding="utf-8")
+    #sys.stderr = f
     print("TomoTwin Version:", version("tomotwin-cryoet"))
 
 
@@ -334,6 +335,7 @@ def _main_():
         augmentation_anchors=aug_anchor,
         augmentation_volumes=aug_volumes,
         label_ext_func=label_filename,
+        return_even_odd_anchors=tconf.reconstruct_anchor,
     )
 
     test_ds = TripletDataset(
@@ -353,6 +355,11 @@ def _main_():
     # Setup network
     ########################
     config["distance"] = distance.name()
+
+    if tconf.reconstruct_anchor:
+        print("Setting 'init_decoder' to True in network config.")
+        config["network_config"]["init_decoder"] = True
+
     network = nw.create_network(config)
 
     ########################
@@ -380,6 +387,7 @@ def _main_():
         criterion=LossPyML(
             loss_func=loss_func, miner=miner, only_negative_labels=only_negative_labels
         ),
+        decoder_criterion=cossim_loss,
         workers=12,
         log_dir=os.path.join(tconf.output_path, "tensorboard"),
         training_data=train_ds,
@@ -390,6 +398,7 @@ def _main_():
         weight_decay=config["train_config"]["weight_decay"],
         patience=config["train_config"]["patience"],
         save_epoch_seperately=tconf.save_after_improvement,
+        reconstruct_anchor=tconf.reconstruct_anchor,
     )
     trainer.set_seed(seed)
     config["window_size"] = tuple(train_ds.get_triplet_dimension())

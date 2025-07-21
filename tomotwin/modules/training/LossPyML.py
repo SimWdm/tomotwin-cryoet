@@ -83,9 +83,6 @@ class LossPyML(nn.Module):
                 print(valid_indicies)
                 print(e)
 
-
-
-
         l = self.loss_func(emb, labels, hard_pairs)
 
         return l

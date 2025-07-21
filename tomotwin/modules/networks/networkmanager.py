@@ -104,5 +104,4 @@ class NetworkManager:
                 config["norm_kwargs"] = {"num_groups": config["groups"]}
                 del config["groups"]
             model = modelclass(**config)
-
             return model

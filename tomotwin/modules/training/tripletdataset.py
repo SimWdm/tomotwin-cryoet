@@ -22,6 +22,8 @@ from torch.utils.data import Dataset
 
 from tomotwin.modules.training.filepathtriplet import FilePathTriplet
 from tomotwin.modules.training.triplethandler import TripletHandler
+from tomotwin.modules.training.f2fd import get_f2fd_pair
+
 
 LabelExtractorFunc = Callable[[str], str]
 
@@ -42,6 +44,7 @@ class TripletDataset(Dataset):
         label_ext_func: LabelExtractorFunc,
         augmentation_volumes: Transformer = None,
         augmentation_anchors: Transformer = None,
+        return_even_odd_anchors: bool = False,
     ):
         self.training_data = training_data
         random.shuffle(self.training_data)
@@ -49,6 +52,7 @@ class TripletDataset(Dataset):
         self.augmentation_anchors = augmentation_anchors
         self.handler = handler
         self.label_ext_func = label_ext_func
+        self.return_even_odd_anchors = return_even_odd_anchors
 
     def __len__(self):
         return len(self.training_data)
@@ -57,7 +61,20 @@ class TripletDataset(Dataset):
 
         triplet = self.training_data[item_index]
         nptriplet = self.handler.handle(triplet)
+        
         anchor_vol = nptriplet.anchor
+        
+        if self.return_even_odd_anchors:
+            anchor_vol_even, anchor_vol_odd = get_f2fd_pair(anchor_vol)
+            
+            anchor_vol_even = anchor_vol_even.astype(np.float32)
+            anchor_vol_even = anchor_vol_even[np.newaxis]
+            anchor_vol_even = torch.from_numpy(anchor_vol_even)
+            
+            anchor_vol_odd = anchor_vol_odd.astype(np.float32)
+            anchor_vol_odd = anchor_vol_odd[np.newaxis]
+            anchor_vol_odd = torch.from_numpy(anchor_vol_odd)
+        
         if self.augmentation_anchors:
             anchor_vol = self.augmentation_anchors.transform(anchor_vol)
         anchor_vol = anchor_vol.astype(np.float32)
@@ -90,7 +107,11 @@ class TripletDataset(Dataset):
             "label_positive": [lbl_pos],
             "label_negative": [lbl_neg],
         }
-
+        
+        if self.return_even_odd_anchors:
+            input_triplet["anchor_even"] = anchor_vol_even
+            input_triplet["anchor_odd"] = anchor_vol_odd
+            
         return input_triplet
 
     def get_triplet_dimension(self):

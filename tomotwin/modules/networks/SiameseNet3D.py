@@ -91,6 +91,7 @@ class SiameseNet3D(TorchModel):
             repeat_layers=0,
             gem_pooling = None,
             init_decoder=False,
+            decode=False,
         ):
             super().__init__()
             norm_func = self.make_norm(norm, 64)
@@ -139,6 +140,7 @@ class SiameseNet3D(TorchModel):
                     final_activation=nn.Identity(),
                     encoder_cat_layer_ids=[0, 1, 2, 3],
                 )
+            self.decode = decode
 
 
         @staticmethod
@@ -167,7 +169,7 @@ class SiameseNet3D(TorchModel):
             )
             return headnet
 
-        def forward(self, inputtensor, decode: bool = False):
+        def forward(self, inputtensor):
             """
             Forward pass through the network
             :param inputtensor: Input tensor
@@ -179,31 +181,32 @@ class SiameseNet3D(TorchModel):
             out = self.max_pooling(out)
             if self.rep_layers0:
                 out = self.rep_layers0(out)
-            if decode:
+            if self.decode:
                 intermediate_features.append(out)
 
             out = self.conv_layer1(out)
             if self.rep_layers1:
                 out = self.rep_layers1(out)
-            if decode:
+            if self.decode:
                 intermediate_features.append(out)
 
             out = self.conv_layer2(out)
             if self.rep_layers2:
                 out = self.rep_layers2(out)
-            if decode:
+            if self.decode:
                 intermediate_features.append(out)
                 
             out = self.conv_layer3(out)
             if self.rep_layers3:
                 out = self.rep_layers3(out)
-            if decode:
+            if self.decode:
                 intermediate_features.append(out)
 
             out = self.conv_layer4(out)
             if self.rep_layers4:
                 out = self.rep_layers4(out)
-            if decode:
+                
+            if self.decode:
                 intermediate_features.append(out)
 
             out = self.adap_max_pool(out)
@@ -212,7 +215,7 @@ class SiameseNet3D(TorchModel):
             out = self.headnet(out)
             out = F.normalize(out, p=2, dim=1)
 
-            if decode:
+            if self.decode:
                 intermediate_features = intermediate_features[::-1]
                 decoder_out = self.decoder(
                     x=intermediate_features[0], 

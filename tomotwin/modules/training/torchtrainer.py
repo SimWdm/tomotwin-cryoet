@@ -46,6 +46,7 @@ class TorchTrainer(Trainer):
         learning_rate: float,
         network: TorchModel,
         criterion: nn.Module,
+        decoder_criterion: callable = None,
         training_data: TripletDataset = None,
         test_data: TripletDataset = None,
         workers: int = 0,
@@ -57,6 +58,7 @@ class TorchTrainer(Trainer):
         weight_decay: float = 0,
         patience: int = None,
         save_epoch_seperately: bool = False,
+        reconstruct_anchor: bool = False,
     ):
         """
         :param epochs: Number of epochs
@@ -72,6 +74,7 @@ class TorchTrainer(Trainer):
         self.training_data = training_data
         self.test_data = test_data
         self.patience = patience
+        self.reconstruct_anchor = reconstruct_anchor
         if self.patience is None:
             self.patience = self.epochs
         self.workers = workers
@@ -80,6 +83,7 @@ class TorchTrainer(Trainer):
         self.log_dir = log_dir
         self.writer = SummaryWriter(log_dir=self.log_dir)
         self.criterion = criterion
+        self.decoder_criterion = decoder_criterion
         self.network = network
         self.network_config = None
         self.output_path = output_path
@@ -257,14 +261,22 @@ class TorchTrainer(Trainer):
         :param batch: Dictionary with batch data
         :return: Loss of the batch
         """
+        losses = {}
+        
         anchor_vol = batch["anchor"]
         positive_vol = batch["positive"]
         negative_vol = batch["negative"]
         full_input = torch.cat((anchor_vol,positive_vol,negative_vol), dim=0).to(self.device, non_blocking=True)
         with autocast():
+            # get embeddings and ignore decoder output which may or may not be present
             out = self.model.forward(full_input)
-            out = torch.split(out, anchor_vol.shape[0], dim=0)
-            loss = self.criterion(
+            if (isinstance(out, tuple) or isinstance(out, list)) and len(out) == 2:
+                out = out[0]
+                
+        out = torch.split(out, anchor_vol.shape[0], dim=0)
+        
+        try:
+            triplet_loss = self.criterion(
                 out[0],
                 out[1],
                 out[2],
@@ -272,7 +284,30 @@ class TorchTrainer(Trainer):
                 label_positive=batch["label_positive"],
                 label_negative=batch["label_negative"],
             )
-        return loss
+            loss = triplet_loss
+        except Exception as e:
+            print(e)
+            import pdb; pdb.set_trace()
+
+        
+        if self.model.module.decode:
+            anchor_vol_even = batch["anchor_even"]
+            anchor_vol_odd = batch["anchor_odd"]
+            full_input = torch.cat([anchor_vol_even], dim=0).to(self.device, non_blocking=True)
+            with autocast():
+                decoder_out = self.model.forward(full_input)[1]
+            decoder_loss = self.decoder_criterion(
+                decoder_out,
+                anchor_vol_odd.to(decoder_out.device, non_blocking=True),
+            )
+            loss = (loss + decoder_loss) / 2.0
+            losses["decoder_out"] = decoder_loss
+            losses["triplet_loss"] = triplet_loss
+        
+        losses["loss"] = loss
+
+        
+        return losses
 
     def save_best_loss(self, current_val_loss: float, epoch: int) -> None:
         """
@@ -321,8 +356,7 @@ class TorchTrainer(Trainer):
             print("Cant activate validation mode for loss")
         with torch.no_grad():
             for _, batch in enumerate(t):
-
-                valloss = self.run_batch(batch)
+                valloss = self.run_batch(batch)["loss"]
                 val_loss.append(valloss.cpu().detach().numpy())
                 desc_t = f"Validation (running loss: {np.mean(val_loss[-20:]):.4f} "
                 t.set_description(desc=desc_t)
@@ -367,14 +401,30 @@ class TorchTrainer(Trainer):
 
         scaler = GradScaler()
         running_loss = []
+        running_triplet_loss = []
+        running_decoder_loss = []
+        
         self.model.train()
         t = tqdm(train_loader, desc="Training", leave=False)
         for _, batch in enumerate(t):
+                        
             self.optimizer.zero_grad()
 
-            loss = self.run_batch(batch)
+            losses = self.run_batch(batch)
+            
+            loss = losses["loss"]
+            
             loss_np = loss.cpu().detach().numpy()
             running_loss.append(loss_np)
+            
+            if "triplet_loss" in losses:
+                triplet_loss_np = losses["triplet_loss"].cpu().detach().numpy()
+                running_triplet_loss.append(triplet_loss_np)
+            
+            if "decoder_out" in losses:
+                decoder_loss_np = losses["decoder_out"].cpu().detach().numpy()
+                running_decoder_loss.append(decoder_loss_np)
+            
             scaler.scale(loss).backward()
             scaler.step(self.optimizer)
             scaler.update()
@@ -383,8 +433,15 @@ class TorchTrainer(Trainer):
             t.set_description(desc=desc_t)
 
         training_loss = np.mean(running_loss)
+        out = {"train_loss": training_loss}
         self.last_loss = training_loss
-        return training_loss
+
+        if "triplet_loss" in losses:
+            out["train_triplet_loss"] = np.mean(running_triplet_loss)
+        if "decoder_out" in losses:
+            out["train_decoder_loss"] = np.mean(running_decoder_loss)
+        
+        return out
 
     def train(self) -> nn.Module:
         """
@@ -406,12 +463,34 @@ class TorchTrainer(Trainer):
             self.f1_improved = False
             self.loss_improved = False
             self.current_epoch = epoch
-            train_loss = self.epoch(train_loader=train_loader)
+            
+            if self.reconstruct_anchor:
+                if isinstance(self.model, nn.DataParallel):
+                    self.model.module.decode = True
+                else:
+                    self.model.decode = True
+
+            train_losses = self.epoch(train_loader=train_loader)
+            train_loss = train_losses["train_loss"]
 
             print(f"Epoch: {epoch + 1}/{self.epochs} - Training Loss: {train_loss:.4f}")
             self.writer.add_scalar("Loss/train", train_loss, epoch)
+            
+            if "train_triplet_loss" in train_losses:
+                self.writer.add_scalar(
+                    "Loss/train_triplet", train_losses["train_triplet_loss"], epoch
+                )
+            if "train_decoder_loss" in train_losses:
+                self.writer.add_scalar(
+                    "Loss/train_decoder", train_losses["train_decoder_loss"], epoch
+                )
 
             # Validation
+            if isinstance(self.model, nn.DataParallel):
+                self.model.module.decode = False
+            else:
+                self.model.decode = False
+                    
             if test_loader is not None:
                 current_val_loss = self.validation_loss(test_loader)
                 current_val_f1 = self.classification_f1_score(test_loader=test_loader)
