@@ -393,7 +393,6 @@ def _main_():
     if "only_negative_labels" in config["train_config"]:
         only_negative_labels = config["train_config"]["only_negative_labels"]
         
-    import pdb; pdb.set_trace()
     trainer = TorchTrainer(
         epochs=tconf.num_epochs,
         batchsize=int(config["train_config"]["batchsize"]),
