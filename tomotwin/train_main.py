@@ -361,8 +361,11 @@ def _main_():
         config["network_config"]["init_decoder"] = True
     
     if "ttt_checkpoint" in config["network_config"]:
-        network = nw.load_network_from_checkpoint(config["network_config"]["ttt_checkpoint"])
-        tconf.train_with_triplet_loss = False
+        if not len(config["network_config"]) == 1:
+            raise Warning(f"'ttt_checkpoint' is set in network_config, other network_config parameters will be ignored!.")
+        network, original_network_config = nw.load_checkpoint_for_finetuning(config["network_config"]["ttt_checkpoint"])
+        original_network_config["ttt_checkpoint"] = config["network_config"]["ttt_checkpoint"]
+        config["network_config"] = original_network_config
     else:
         network = nw.create_network(config)
 
