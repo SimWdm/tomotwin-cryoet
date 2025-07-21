@@ -335,7 +335,7 @@ def _main_():
         augmentation_anchors=aug_anchor,
         augmentation_volumes=aug_volumes,
         label_ext_func=label_filename,
-        return_even_odd_anchors=tconf.reconstruct_anchor,
+        return_even_odd_anchors=tconf.train_with_reconstruction_loss,
     )
 
     test_ds = TripletDataset(
@@ -356,7 +356,7 @@ def _main_():
     ########################
     config["distance"] = distance.name()
 
-    if tconf.reconstruct_anchor:
+    if tconf.train_with_reconstruction_loss:
         print("Setting 'init_decoder' to True in network config.")
         config["network_config"]["init_decoder"] = True
     
@@ -402,7 +402,7 @@ def _main_():
         weight_decay=config["train_config"]["weight_decay"],
         patience=config["train_config"]["patience"],
         save_epoch_seperately=tconf.save_after_improvement,
-        reconstruct_anchor=tconf.reconstruct_anchor,
+        train_with_reconstruction_loss=tconf.train_with_reconstruction_loss,
     )
     trainer.set_seed(seed)
     config["window_size"] = tuple(train_ds.get_triplet_dimension())

@@ -39,7 +39,7 @@ class TrainingConfiguration:
     distance: str
     validvolumes: str
     save_after_improvement: bool
-    reconstruct_anchor: bool = False
+    train_with_reconstruction_loss: bool = False
 
 
 class TrainingUI(ABC):

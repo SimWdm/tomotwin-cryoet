@@ -58,7 +58,7 @@ class TorchTrainer(Trainer):
         weight_decay: float = 0,
         patience: int = None,
         save_epoch_seperately: bool = False,
-        reconstruct_anchor: bool = False,
+        train_with_reconstruction_loss: bool = False,
     ):
         """
         :param epochs: Number of epochs
@@ -74,7 +74,7 @@ class TorchTrainer(Trainer):
         self.training_data = training_data
         self.test_data = test_data
         self.patience = patience
-        self.reconstruct_anchor = reconstruct_anchor
+        self.train_with_reconstruction_loss = train_with_reconstruction_loss
         if self.patience is None:
             self.patience = self.epochs
         self.workers = workers
@@ -464,7 +464,7 @@ class TorchTrainer(Trainer):
             self.loss_improved = False
             self.current_epoch = epoch
             
-            if self.reconstruct_anchor:
+            if self.train_with_reconstruction_loss:
                 if isinstance(self.model, nn.DataParallel):
                     self.model.module.decode = True
                 else:

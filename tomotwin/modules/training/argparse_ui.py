@@ -30,7 +30,7 @@ class TrainingArgParseUI(TrainingUI):
         self.config = None
         self.checkpoint = None
         self.distance = None
-        self.reconstruct_anchor = False  # NEW
+        self.train_with_reconstruction_loss = False  # NEW
         self.backprop_through_triplet_loss = True  # NEW
 
     def create_parser(self) -> argparse.ArgumentParser:
@@ -114,7 +114,7 @@ class TrainingArgParseUI(TrainingUI):
         )
         
         parser.add_argument(
-            "--reconstruct_anchor",
+            "--train_with_reconstruction_loss",
             action='store_true',
             default=False,
             help="Reconstruct the anchor volume after each epoch.",
@@ -138,7 +138,7 @@ class TrainingArgParseUI(TrainingUI):
         self.distance = args.distance
         self.validvolumes = args.validvolumes
         self.save_after_improvement = args.save_after_improvement
-        self.reconstruct_anchor = args.reconstruct_anchor  
+        self.train_with_reconstruction_loss = args.train_with_reconstruction_loss  
         self.backprop_through_triplet_loss = args.backprop_through_triplet_loss  
 
     def get_training_configuration(self) -> TrainingConfiguration:
@@ -153,7 +153,7 @@ class TrainingArgParseUI(TrainingUI):
             distance=self.distance,
             validvolumes=self.validvolumes,
             save_after_improvement=self.save_after_improvement,
-            reconstruct_anchor=self.reconstruct_anchor,  
+            train_with_reconstruction_loss=self.train_with_reconstruction_loss,  
             backprop_through_triplet_loss=self.backprop_through_triplet_loss,  
         )
         return tconf
