@@ -359,8 +359,11 @@ def _main_():
     if tconf.reconstruct_anchor:
         print("Setting 'init_decoder' to True in network config.")
         config["network_config"]["init_decoder"] = True
-
-    network = nw.create_network(config)
+    
+    if "ttt_checkpoint" in config["network_config"]:
+        network = nw.load_network_from_checkpoint(config["network_config"]["ttt_checkpoint"])
+    else:
+        network = nw.create_network(config)
 
     ########################
     # Setup miners and loss
