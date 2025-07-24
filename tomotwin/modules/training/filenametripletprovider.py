@@ -36,6 +36,7 @@ class FilenameMatchingTripletProvider(TripletProvider):
         max_neg: int=1,
         shuffle: bool=True,
     ):
+        raise AssertionError(f"Class {self.__class__.__name__} is deprecated and should not be used for now!")
         """
         :param path_pdb: Path to folder with pdb files
         :param path_volume: Path to folder with volume files
@@ -51,63 +52,62 @@ class FilenameMatchingTripletProvider(TripletProvider):
         self.max_neg = max_neg
         self.shuffle = shuffle
 
-    def generate_triplets(
-        self, pdbfiles: List[str], volumefiles: List[str]
-    ) -> List[FilePathTriplet]:
-        """
-        This procedure assumes they the PDB ID is the filename of pdbfile. If that is not the case
-        this procecure will not work.
-        :param pdbfiles: List of path to pdb files
-        :param volumefiles:  List of path to volume files
-        :return: List of FileTriplets
-        """
+    # def generate_triplets(
+    #     self, pdbfiles: List[str], volumefiles: List[str]
+    # ) -> List[FilePathTriplet]:
+    #     """
+    #     This procedure assumes they the PDB ID is the filename of pdbfile. If that is not the case
+    #     this procecure will not work.
+    #     :param pdbfiles: List of path to pdb files
+    #     :param volumefiles:  List of path to volume files
+    #     :return: List of FileTriplets
+    #     """
 
-        triplets = []
-        if self.shuffle:
-            np.random.shuffle(volumefiles)
+    #     triplets = []
+    #     if self.shuffle:
+    #         np.random.shuffle(volumefiles)
 
-        neg_candidates = volumefiles.copy()
-        volumefiles_filenames = [os.path.splitext(os.path.basename(v))[0].upper() for v in volumefiles]
-        neg_choosen = []
-        no_match = 0
-        for pdbfile in tqdm.tqdm(pdbfiles, desc="Generating triplets"):
-            pdb = os.path.splitext(os.path.basename(pdbfile))[0].upper()
-            for vol_index, positive_volume_candidate in enumerate(volumefiles):
+    #     neg_candidates = volumefiles.copy()
+    #     volumefiles_filenames = [os.path.splitext(os.path.basename(v))[0].upper() for v in volumefiles]
+    #     neg_choosen = []
+    #     no_match = 0
+    #     for pdbfile in tqdm.tqdm(pdbfiles, desc="Generating triplets"):
+    #         pdb = os.path.splitext(os.path.basename(pdbfile))[0].upper()
+    #         for vol_index, positive_volume_candidate in enumerate(volumefiles):
 
-                if pdb in volumefiles_filenames[vol_index]:
+    #             if pdb in volumefiles_filenames[vol_index]:
 
-                    chosen =0
-                    selections = []
-                    while chosen<self.max_neg:
-                        cand_index = np.random.randint(0,len(neg_candidates))
-                        cand = neg_candidates[cand_index]
-                        if pdb not in cand.upper():
-                            selections.append(cand)
-                            neg_candidates.remove(cand)
-                            chosen = chosen +1
-                            if len(neg_candidates)<10:
-                                neg_candidates = volumefiles.copy()
-                            no_match = 0
-                        else:
-                            no_match = no_match + 1
-                            if no_match == 10:
-                                neg_candidates = volumefiles.copy()
-                                no_match=0
+    #                 chosen =0
+    #                 selections = []
+    #                 while chosen<self.max_neg:
+    #                     cand_index = np.random.randint(0,len(neg_candidates))
+    #                     cand = neg_candidates[cand_index]
+    #                     if pdb not in cand.upper():
+    #                         selections.append(cand)
+    #                         neg_candidates.remove(cand)
+    #                         chosen = chosen +1
+    #                         if len(neg_candidates)<10:
+    #                             neg_candidates = volumefiles.copy()
+    #                         no_match = 0
+    #                     else:
+    #                         no_match = no_match + 1
+    #                         if no_match == 10:
+    #                             neg_candidates = volumefiles.copy()
+    #                             no_match=0
 
-                    new_triplets = [
-                        FilePathTriplet(pdbfile, positive_volume_candidate, neg)
-                        for neg in selections
-                    ]
+    #                 new_triplets = [
+    #                     FilePathTriplet(pdbfile, positive_volume_candidate, neg)
+    #                     for neg in selections
+    #                 ]
 
-                    neg_choosen.extend(selections)
-                    triplets.extend(new_triplets)
+    #                 neg_choosen.extend(selections)
+    #                 triplets.extend(new_triplets)
 
-        return triplets
+    #     return triplets
 
-    def get_triplets(self) -> List[FilePathTriplet]:
-
-        pdbfiles = glob(os.path.join(self.path_pdb, self.mask_pdb), recursive=True)
-        volumefiles = glob(os.path.join(self.path_volume, self.mask_volumes), recursive=True)
-        triplets = self.generate_triplets(pdbfiles, volumefiles)
-        np.random.shuffle(triplets)
-        return triplets
+    # def get_triplets(self) -> List[FilePathTriplet]:
+    #     pdbfiles = glob(os.path.join(self.path_pdb, self.mask_pdb), recursive=True)
+    #     volumefiles = glob(os.path.join(self.path_volume, self.mask_volumes), recursive=True)
+    #     triplets = self.generate_triplets(pdbfiles, volumefiles)
+    #     np.random.shuffle(triplets)
+    #     return triplets
