@@ -172,7 +172,7 @@ def generate_triplets(
         )
     else:
         tripletprov = FilenameMatchingTripletProviderNoPDB(
-            path_volume=tconf.volume_path, mask_volumes="**/*.mrc"
+            path_volume=tconf.volume_path, mask_volumes="**/*.mrc", exclude_volumes_with_sutrings=tconf.exclude_volumes_with_substrings
         )
 
     master_list = tripletprov.get_triplets()

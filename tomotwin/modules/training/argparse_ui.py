@@ -30,8 +30,9 @@ class TrainingArgParseUI(TrainingUI):
         self.config = None
         self.checkpoint = None
         self.distance = None
-        self.train_with_reconstruction_loss = False  # NEW
-        self.train_with_triplet_loss = True  # NEW
+        self.train_with_reconstruction_loss = False  
+        self.train_with_triplet_loss = True  
+        self.exclude_volumes_with_substrings = []  
 
     def create_parser(self) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(
@@ -126,6 +127,14 @@ class TrainingArgParseUI(TrainingUI):
             default=False,
             help="Train the network with the reconstruction loss."
         )
+        
+        parser.add_argument(
+            "--exclude_volumes_with_substrings",
+            type=str,
+            nargs='*',
+            default=[],
+            help="List of substrings that should be excluded from the training volumes.",
+        )
 
 
         return parser
@@ -146,6 +155,7 @@ class TrainingArgParseUI(TrainingUI):
         self.save_after_improvement = args.save_after_improvement
         self.train_with_reconstruction_loss = args.train_with_reconstruction_loss  
         self.train_with_triplet_loss = args.train_with_triplet_loss  
+        self.exclude_volumes_with_substrings = args.exclude_volumes_with_substrings
 
     def get_training_configuration(self) -> TrainingConfiguration:
         tconf = TrainingConfiguration(
@@ -161,5 +171,6 @@ class TrainingArgParseUI(TrainingUI):
             save_after_improvement=self.save_after_improvement,
             train_with_reconstruction_loss=self.train_with_reconstruction_loss,  
             train_with_triplet_loss=self.train_with_triplet_loss,  
+            exclude_volumes_with_substrings=self.exclude_volumes_with_substrings,
         )
         return tconf

@@ -12,7 +12,7 @@ may affect the distribution and modification of this software.
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -41,6 +41,7 @@ class TrainingConfiguration:
     save_after_improvement: bool
     train_with_triplet_loss: bool = True
     train_with_reconstruction_loss: bool = False
+    exclude_volumes_with_substrings: list[str] = field(default_factory=list)
 
 
 class TrainingUI(ABC):

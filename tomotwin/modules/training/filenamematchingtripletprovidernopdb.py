@@ -33,6 +33,7 @@ class FilenameMatchingTripletProviderNoPDB(TripletProvider):
         self,
         path_volume: str,
         mask_volumes="*.mrc",
+        exclude_volumes_with_sutrings: List[str]=[],
         shuffle: bool=True,
     ):
         """
@@ -44,11 +45,16 @@ class FilenameMatchingTripletProviderNoPDB(TripletProvider):
         """
         self.path_volume = path_volume
         self.mask_volumes = mask_volumes
+        self.exclude_volumes_with_sutrings = exclude_volumes_with_sutrings
         self.shuffle = shuffle
 
 
     def get_triplets(self) -> List[FilePathTriplet]:
         volumefiles = glob(os.path.join(self.path_volume, self.mask_volumes), recursive=True)
+        n = len(volumefiles)
+        for exclude_str in self.exclude_volumes_with_sutrings:
+            volumefiles = [f for f in volumefiles if exclude_str not in f]
+        print(f"Found {n} volume files, after excluding all which contain a string in {self.exclude_volumes_with_sutrings} there are {len(volumefiles)} left.")
         triplets = self.generate_triplets(volumefiles)
         np.random.shuffle(triplets)
         return triplets
