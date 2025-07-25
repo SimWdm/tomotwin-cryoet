@@ -454,7 +454,8 @@ class TorchTrainer(Trainer):
         train_loader, test_loader = self.get_train_test_dataloader()
 
         self.current_epoch = -1
-        self.validate(test_loader=test_loader)
+        if not self.train_with_reconstruction_loss:
+            self.validate(test_loader=test_loader)
         
         # Training Loop
         for epoch in tqdm(
