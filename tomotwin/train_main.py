@@ -101,9 +101,30 @@ def get_augmentations(
         ],
         probs=[0.3, 0.3, 0.3, 0.3, 0.3, 0.9],
     )
+    aug_even_odd = AugmentationPipeline(
+        augs=[
+            RotateFull(axes=(1, 2)),
+            Shift(
+                axis=0,
+                min_shift=-aug_train_shift_distance,
+                max_shift=aug_train_shift_distance,
+            ),
+            Shift(
+                axis=1,
+                min_shift=-aug_train_shift_distance,
+                max_shift=aug_train_shift_distance,
+            ),
+            Shift(
+                axis=2,
+                min_shift=-aug_train_shift_distance,
+                max_shift=aug_train_shift_distance,
+            ),
+        ]
+    )
+    
     if aug_anchor is None:
         aug_anchor = aug_volumes
-    return aug_anchor, aug_volumes
+    return aug_anchor, aug_volumes, aug_even_odd
 
 
 def train_test_split_anchor_positive(
@@ -327,7 +348,7 @@ def _main_():
             "aug_train_shift_distance"
         ]
 
-    aug_anchor, aug_volumes = get_augmentations(**aug_args)
+    aug_anchor, aug_volumes, aug_even_odd = get_augmentations(**aug_args)
 
     train_ds = TripletDataset(
         training_data=train_triplets,
@@ -336,6 +357,7 @@ def _main_():
         augmentation_volumes=aug_volumes,
         label_ext_func=label_filename,
         return_even_odd_anchors=tconf.train_with_reconstruction_loss,
+        augmentation_even_odd_anchors=aug_even_odd,
     )
 
     test_ds = TripletDataset(

@@ -11,6 +11,7 @@ obligations and rights under this license and for instructions on how secondary 
 may affect the distribution and modification of this software.
 """
 
+import copy
 import random
 from typing import List, Callable
 from typing import Protocol
@@ -45,6 +46,7 @@ class TripletDataset(Dataset):
         augmentation_volumes: Transformer = None,
         augmentation_anchors: Transformer = None,
         return_even_odd_anchors: bool = False,
+        augmentation_even_odd_anchors: Transformer = None,
     ):
         self.training_data = training_data
         random.shuffle(self.training_data)
@@ -53,6 +55,7 @@ class TripletDataset(Dataset):
         self.handler = handler
         self.label_ext_func = label_ext_func
         self.return_even_odd_anchors = return_even_odd_anchors
+        self.augmentation_even_odd_anchors = augmentation_even_odd_anchors
 
     def __len__(self):
         return len(self.training_data)
@@ -65,7 +68,10 @@ class TripletDataset(Dataset):
         anchor_vol = nptriplet.anchor
         
         if self.return_even_odd_anchors:
-            anchor_vol_even, anchor_vol_odd = get_f2fd_pair(anchor_vol)
+            anchor_vol_clone = copy.deepcopy(anchor_vol)
+            if self.augmentation_even_odd_anchors is not None:
+                anchor_vol_clone = self.augmentation_even_odd_anchors.transform(anchor_vol_clone)
+            anchor_vol_even, anchor_vol_odd = get_f2fd_pair(anchor_vol_clone)
             
             anchor_vol_even = anchor_vol_even.astype(np.float32)
             anchor_vol_even = anchor_vol_even[np.newaxis]
