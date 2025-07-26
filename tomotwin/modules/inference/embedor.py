@@ -93,17 +93,19 @@ class TorchEmbedor(Embedor):
         self.model = NetworkManager.create_network(self.tomotwin_config).get_model()
         print(type(self.model))
         before_parallel_failed = False
-
+        
         if checkpoint is not None:
+            state_dict = checkpoint["model_state_dict"]
+            state_dict = NetworkManager.remove_module_prefix(state_dict)
             try:
-                self.model.load_state_dict(checkpoint["model_state_dict"])
-            except RuntimeError:
-                print("Load before failed")
+                self.model.load_state_dict(state_dict)
+            except RuntimeError as e:
+                print(f"Load before failed: {e}")
                 before_parallel_failed = True
 
         self.model = torch.nn.DataParallel(self.model)
         if before_parallel_failed:
-            self.model.load_state_dict(checkpoint["model_state_dict"])
+            self.model.load_state_dict(state_dict)
 
     def embed(self, volume_data: VolumeDataset) -> np.array:
         """Calculates the embeddings. The volumes showed have the dimension NxBSxBSxBS where N is the number of nu"""
@@ -182,11 +184,11 @@ class TorchEmbedorDistributed(Embedor):
                 print(self.tomotwin_config)
 
         self.model = NetworkManager.create_network(self.tomotwin_config).get_model()
+        
         if checkpoint is not None:
-            try:
-                self.model.load_state_dict(checkpoint["model_state_dict"])
-            except RuntimeError:
-                print("Load before failed")
+            state_dict = checkpoint["model_state_dict"]
+            state_dict = NetworkManager.remove_module_prefix(state_dict)
+            self.model.load_state_dict(state_dict)
 
         self.model.to(self.rank)
 
