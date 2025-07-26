@@ -33,6 +33,7 @@ from tqdm import tqdm
 import tomotwin
 from tomotwin.modules.common import preprocess
 from tomotwin.modules.networks.torchmodel import TorchModel
+from tomotwin.modules.networks.networkmanager import NetworkManager
 from tomotwin.modules.training.trainer import Trainer
 from tomotwin.modules.training.tripletdataset import TripletDataset
 
@@ -156,11 +157,8 @@ class TorchTrainer(Trainer):
         )
 
         if self.checkpoint is not None:
-            if self.rank == 0:
-                self.load_checkpoint(checkpoint=self.checkpoint)
-            if dist.is_initialized():
-                # Wait for rank 0 to load the checkpoint
-                dist.barrier()
+            self.load_checkpoint(checkpoint=self.checkpoint)
+
 
 
         if dist.is_initialized():
@@ -459,7 +457,10 @@ class TorchTrainer(Trainer):
             self.checkpoint = None
             return
 
-        self.model.load_state_dict(self.checkpoint["model_state_dict"])
+        state_dict = self.checkpoint["model_state_dict"]
+        state_dict = NetworkManager.remove_module_prefix(state_dict)
+        self.model.load_state_dict(state_dict)
+        
         self.optimizer.load_state_dict(self.checkpoint["optimizer_state_dict"])
         self.start_epoch = self.checkpoint["epoch"] + 1
         self.last_loss = self.checkpoint["loss"]
@@ -533,7 +534,7 @@ class TorchTrainer(Trainer):
         train_loader, test_loader = self.get_train_test_dataloader()
 
         self.current_epoch = -1
-        if not self.train_with_reconstruction_loss:
+        if self.train_with_reconstruction_loss and not self.train_with_triplet_loss:
             self.validate(test_loader=test_loader)
         
         # Training Loop
