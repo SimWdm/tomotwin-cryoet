@@ -109,6 +109,18 @@ class NetworkManager:
                 del config["groups"]
             model = modelclass(**config)
             return model
+    
+    @staticmethod
+    def remove_module_prefix(state_dict):
+        """
+        Remove 'module.' prefix from keys in the state_dict. Needed when loading models that were trained with DDP.
+        """
+        new_state_dict = {}
+        for k, v in state_dict.items():
+            # Remove 'module.' prefix if present
+            new_key = k.replace("module.", "") if k.startswith("module.") else k
+            new_state_dict[new_key] = v
+        return new_state_dict
 
     @staticmethod
     def load_network_from_checkpoint(checkpoint: str) -> TorchModel:
@@ -119,7 +131,16 @@ class NetworkManager:
         tomotwin_config = ckpt["tomotwin_config"]
         model = NetworkManager.create_network(tomotwin_config)
         model_ = model.get_model()
-        model_.load_state_dict(ckpt["model_state_dict"])
-        print(f"Successfully loaded model from {checkpoint}")
+        
+        state_dict = NetworkManager.remove_module_prefix(ckpt["model_state_dict"])
+        missing, unexpected = model_.load_state_dict(state_dict, strict=False)
+        if missing:
+            raise AssertionError(f"State dict is missing keys: {missing}")
+        if unexpected:
+            raise AssertionError(f"State dict contains unexpected keys: {unexpected}")
+        if not missing and not unexpected:
+            print("Model loading successful")
+        
         model.set_model(model_)
+        
         return model, ckpt["tomotwin_config"]["network_config"]

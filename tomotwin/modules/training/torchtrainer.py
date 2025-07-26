@@ -22,8 +22,11 @@ from torch import nn
 from torch import optim
 from torch.backends import cudnn
 from torch.cuda.amp import GradScaler, autocast
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
@@ -68,6 +71,16 @@ class TorchTrainer(Trainer):
         """
 
         super().__init__()
+
+        if "RANK" in os.environ and "WORLD_SIZE" in os.environ:
+            dist.init_process_group(backend="nccl")
+            self.rank = dist.get_rank()
+            self.local_rank = int(os.environ.get("LOCAL_RANK", 0))
+            torch.cuda.set_device(self.local_rank)
+        else:
+            self.rank = 0
+            self.local_rank = 0
+        
         cudnn.benchmark = True
         self.epochs = epochs
         self.batchsize = batchsize
@@ -107,8 +120,12 @@ class TorchTrainer(Trainer):
         self.loss_improved = False
 
         # Write graph to tensorboard
-        dummy_input = torch.zeros([12, 1, 37, 37, 37])
-        self.writer.add_graph(self.model, dummy_input)
+        if not dist.is_initialized() or dist.get_rank() == 0:
+            dummy_input = torch.zeros([12, 1, 37, 37, 37], device=self.device)
+            try:
+                self.writer.add_graph(self.model, dummy_input)
+            except Exception as e:
+                print(f"Could not add graph to TensorBoard: {e}")
 
         self.model = self.model.to(self.device)
         self.optimizer = getattr(optim, optimizer)(
@@ -122,16 +139,51 @@ class TorchTrainer(Trainer):
         )
         model_params = filter(lambda p: p.requires_grad, self.model.parameters())
         params = sum([np.prod(p.size()) for p in model_params])
-        print("Number of parameters:", params)
+        self.run_if_rank_0(
+            print, 
+            "Number of parameters:", params
+            )
 
-        self.writer.add_text("Optimizer", type(self.optimizer).__name__)
-        self.writer.add_text("Initial learning rate", str(self.learning_rate))
+        self.run_if_rank_0(
+        self.writer.add_text,
+            "Optimizer", 
+            type(self.optimizer).__name__
+        )
+        self.run_if_rank_0(
+            self.writer.add_text,
+            "Initial learning rate",
+            str(self.learning_rate)
+        )
 
         if self.checkpoint is not None:
-            self.load_checkpoint(checkpoint=self.checkpoint)
+            if self.rank == 0:
+                self.load_checkpoint(checkpoint=self.checkpoint)
+            if dist.is_initialized():
+                # Wait for rank 0 to load the checkpoint
+                dist.barrier()
 
-        self.model = nn.DataParallel(self.model)
 
+        if dist.is_initialized():
+            self.model = torch.nn.parallel.DistributedDataParallel(
+                self.model.to(self.local_rank),
+                device_ids=[self.local_rank],
+                output_device=self.local_rank,
+                find_unused_parameters=False,
+            )
+        else:
+            self.model = self.model.to(self.device)
+    
+    def run_if_rank_0(self, func, *args, **kwargs):
+        """
+        Run a function only if not in DDP mode.
+        This is useful for functions that should not be run in DDP mode, e.g. self.run_if_not_ddping.
+        print,
+        """
+        if not dist.is_initialized() or dist.get_rank() == 0:
+            return func(*args, **kwargs)
+        else:
+            return None
+            
     def set_seed(self, seed: int):
         """
         Set the seed for random number generators
@@ -143,26 +195,38 @@ class TorchTrainer(Trainer):
         """
         Create a dataloaders for the train and validation data
         """
+        train_sampler = None
+        test_sampler = None
+
+        if torch.distributed.is_initialized():
+            train_sampler = DistributedSampler(self.training_data, shuffle=True)
+            if self.test_data is not None:
+                test_sampler = DistributedSampler(self.test_data, shuffle=False)
+            
+        shuffle_kwarg = {"shuffle": True} if train_sampler is None else {}
         train_loader = DataLoader(
             self.training_data,
             batch_size=self.batchsize,
-            shuffle=True,
+            sampler=train_sampler,
             num_workers=self.workers,
             pin_memory=False,
             # prefetch_factor=5,
             timeout=180,
+            **shuffle_kwarg,
         )
 
         test_loader = None
+        shuffle_kwarg = {"shuffle": False} if test_sampler is None else {}
         if self.test_data is not None:
             test_loader = DataLoader(
                 self.test_data,
                 batch_size=self.batchsize,
-                shuffle=True,
+                sampler=test_sampler,
                 num_workers=self.workers,
                 pin_memory=False,
                 # prefetch_factor=5,
                 timeout=60,
+                **shuffle_kwarg,
             )
         return train_loader, test_loader
 
@@ -217,7 +281,8 @@ class TorchTrainer(Trainer):
         :return: F1 score
         """
         self.model.eval()
-        t = tqdm(test_loader, desc="Classification accuracy", leave=False)
+        disable_bar = dist.is_initialized() and dist.get_rank() != 0
+        t = tqdm(test_loader, desc="Classification accuracy", leave=False, disable=disable_bar)
         anchor_emb = {}  # pd.DataFrame()
         vol_emb = {}  # pd.DataFrame()
 
@@ -318,7 +383,8 @@ class TorchTrainer(Trainer):
         """
         if current_val_loss < self.best_val_loss:
             self.loss_improved = True
-            print(
+            self.run_if_rank_0(
+                print,
                 f"Validation loss improved from {self.best_val_loss} to {current_val_loss}"
             )
             self.best_epoch_loss = epoch
@@ -334,7 +400,8 @@ class TorchTrainer(Trainer):
         """
         if current_val_f1 > self.best_val_f1:
             self.f1_improved = True
-            print(
+            self.run_if_rank_0(
+                print,
                 f"Validation F1 score improved from {self.best_val_f1} to {current_val_f1}"
             )
             self.best_epoch_f1 = epoch
@@ -348,12 +415,16 @@ class TorchTrainer(Trainer):
         """
         val_loss = []
         self.model.eval()
-        t = tqdm(test_loader, desc="Validation", leave=False)
+        disable_bar = dist.is_initialized() and dist.get_rank() != 0
+        t = tqdm(test_loader, desc="Validation", leave=False, disable=disable_bar)
 
         try:
             self.criterion.set_validation(True)
         except:
-            print("Cant activate validation mode for loss")
+            self.run_if_rank_0(
+                print, 
+                "Cant activate validation mode for loss"
+            )
         with torch.no_grad():
             for _, batch in enumerate(t):
                 valloss = self.run_batch(batch, mode="val")["loss"]
@@ -363,7 +434,10 @@ class TorchTrainer(Trainer):
         try:
             self.criterion.set_validation(False)
         except:
-            print("Cant deactivate validation mode for loss")
+            self.run_if_rank_0(
+                print, 
+                "Cant deactivate validation mode for loss"
+            )
 
         current_val_loss = np.mean(val_loss)
         return current_val_loss
@@ -378,7 +452,10 @@ class TorchTrainer(Trainer):
         try:
             self.checkpoint = torch.load(checkpoint)
         except FileNotFoundError:
-            print(f"Checkpoint {checkpoint} can't be found. Ignore it.")
+            self.run_if_rank_0(
+                print, 
+                f"Checkpoint {checkpoint} can't be found. Ignore it."
+            )
             self.checkpoint = None
             return
 
@@ -388,7 +465,8 @@ class TorchTrainer(Trainer):
         self.last_loss = self.checkpoint["loss"]
         self.best_val_loss = self.checkpoint["best_loss"]
         self.best_val_f1 = self.checkpoint["best_f1"]
-        print(
+        self.run_if_rank_0(
+            print,
             f"Restart from checkpoint. Epoch: {self.start_epoch}, Training loss: {self.last_loss}, Validation loss: {self.best_val_loss}"
         )
 
@@ -405,7 +483,8 @@ class TorchTrainer(Trainer):
         running_decoder_loss = []
         
         self.model.train()
-        t = tqdm(train_loader, desc="Training", leave=False)
+        disable_bar = dist.is_initialized() and dist.get_rank() != 0
+        t = tqdm(train_loader, desc="Training", leave=False, disable=disable_bar)
         for _, batch in enumerate(t):
                         
             self.optimizer.zero_grad()
@@ -458,51 +537,63 @@ class TorchTrainer(Trainer):
             self.validate(test_loader=test_loader)
         
         # Training Loop
+        disable_bar = dist.is_initialized() and dist.get_rank() != 0
         for epoch in tqdm(
             range(self.start_epoch, self.epochs),
             initial=self.start_epoch,
             total=self.epochs,
             desc="Epochs",
+            disable=disable_bar,
         ):
+            if dist.is_initialized() and hasattr(train_loader, "sampler"):
+                train_loader.sampler.set_epoch(epoch)
             self.f1_improved = False
             self.loss_improved = False
             self.current_epoch = epoch
             
             if self.train_with_reconstruction_loss:
-                if isinstance(self.model, nn.DataParallel):
-                    self.model.module.decode = True
-                else:
-                    self.model.decode = True
+                model_ref = self.model.module if hasattr(self.model, "module") else self.model
+                model_ref.decode = True
 
             train_losses = self.train_epoch(train_loader=train_loader)
             train_loss = train_losses["train_loss"]
 
-            print(f"Epoch: {epoch + 1}/{self.epochs} - Training Loss: {train_loss:.4f}")
-            self.writer.add_scalar("Loss/train", train_loss, epoch)
+            self.run_if_rank_0(
+                print, 
+                f"Epoch: {epoch + 1}/{self.epochs} - Training Loss: {train_loss:.4f}"
+                )
+            self.run_if_rank_0(
+                self.writer.add_scalar,
+                "Loss/train",
+                train_loss,
+                epoch,
+            )
             
             if "train_triplet_loss" in train_losses:
-                self.writer.add_scalar(
+                self.run_if_rank_0(
+                    self.writer.add_scalar,
                     "Loss/train_triplet", train_losses["train_triplet_loss"], epoch
                 )
             if "train_decoder_loss" in train_losses:
-                self.writer.add_scalar(
+                self.run_if_rank_0(
+                    self.writer.add_scalar,
                     "Loss/train_decoder", train_losses["train_decoder_loss"], epoch
                 )
 
             # Validation
-            if isinstance(self.model, nn.DataParallel):
-                self.model.module.decode = False
-            else:
-                self.model.decode = False
+            model_ref = self.model.module if hasattr(self.model, "module") else self.model
+            model_ref.decode = False
             
             if test_loader is not None:
                 self.validate(test_loader=test_loader)
 
-            self.writer.flush()
+            self.run_if_rank_0(self.writer.flush)
 
             if self.output_path is not None:
-                self.write_results_to_disk(
-                    self.output_path, save_each_improvement=self.save_epoch_seperately
+                self.run_if_rank_0(
+                    self.write_results_to_disk,
+                    self.output_path,
+                    save_each_improvement=self.save_epoch_seperately,
                 )
 
         return self.model
@@ -512,11 +603,28 @@ class TorchTrainer(Trainer):
         if test_loader is not None:
             current_val_loss = self.validation_loss(test_loader)
             current_val_f1 = self.classification_f1_score(test_loader=test_loader)
-            self.scheduler.step(current_val_loss)
-            print(f"Validation Loss: {current_val_loss:.4f}.")
-            print(f"Validation F1 Score: {current_val_f1:.4f}.")
-            self.writer.add_scalar("Loss/validation", current_val_loss, self.current_epoch)
-            self.writer.add_scalar("F1/validation", current_val_f1, self.current_epoch)
+            if not dist.is_initialized() or dist.get_rank() == 0:
+                self.scheduler.step(current_val_loss)
+            self.run_if_rank_0(
+                print, 
+                f"Validation Loss: {current_val_loss:.4f}."
+            )
+            self.run_if_rank_0(
+                print, 
+                f"Validation F1 Score: {current_val_f1:.4f}."
+            )
+            self.run_if_rank_0(
+                self.writer.add_scalar,
+                "Loss/validation", 
+                current_val_loss, 
+                self.current_epoch
+            )
+            self.run_if_rank_0(
+                self.writer.add_scalar,
+                "F1/validation", 
+                current_val_f1, 
+                self.current_epoch
+            )
             self.save_best_loss(current_val_loss, self.current_epoch)
             self.save_best_f1(current_val_f1, self.current_epoch)
 
@@ -625,6 +733,8 @@ class TorchTrainer(Trainer):
         :param kwargs:
         :return: None
         """
+        if dist.is_initialized() and dist.get_rank() != 0:
+            return
         self.write_model_to_disk(path, self.model, "latest.pth", self.current_epoch)
 
         if self.current_epoch == self.epochs - 1:

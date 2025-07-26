@@ -424,7 +424,7 @@ def _main_():
             loss_func=loss_func, miner=miner, only_negative_labels=only_negative_labels
         ),
         decoder_criterion=cossim_loss,
-        workers=12,
+        workers=8,
         log_dir=os.path.join(tconf.output_path, "tensorboard"),
         training_data=train_ds,
         test_data=test_ds,
