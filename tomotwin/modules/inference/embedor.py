@@ -25,6 +25,8 @@ import tomotwin.modules.common.preprocess as pp
 from tomotwin.modules.inference.volumedata import VolumeDataset
 from tomotwin.modules.networks.networkmanager import NetworkManager
 
+import torch._dynamo
+torch._dynamo.config.suppress_errors = True
 
 class Embedor(ABC):
     """
