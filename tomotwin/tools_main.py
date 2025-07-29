@@ -17,6 +17,7 @@ from typing import List
 
 from tomotwin.modules.tools.embedding_mask import EmbeddingMaskTool
 from tomotwin.modules.tools.extract_reference import ExtractReference
+from tomotwin.modules.tools.extract_subvolumes import ExtractSubvolumes
 from tomotwin.modules.tools.filter_embedding import FilterTool
 from tomotwin.modules.tools.info import Info
 from tomotwin.modules.tools.make_target import MakeTargetEmbeddings
@@ -36,6 +37,7 @@ def get_tool_list() -> List[TomoTwinTool]:
 
     tools.append(ScaleCoordinates())
     tools.append(ExtractReference())
+    tools.append(ExtractSubvolumes())
     tools.append(UmapTool())
     tools.append(Info())
     tools.append(MedianTool())
