@@ -7,6 +7,7 @@ import os
 import pandas as pd
 import shutil
 import tqdm
+import zarr
 
 from typing import List
 
@@ -130,8 +131,14 @@ class ExtractSubvolumes(TomoTwinTool):
         subtomo_idx = 0
         for vol_idx, vol_file in enumerate(vol_files):
             
-            with mrcfile.open(vol_file) as mrc:
-                vol = mrc.data
+            
+            if vol_file.endswith('.zarr'):
+                vol = zarr.load(vol_file)[0]
+            elif vol_file.endswith('.mrc'):
+                with mrcfile.open(vol_file) as mrc:
+                    vol = mrc.data
+            else:
+                raise ValueError(f"Unsupported file format: {vol_file}.")
                 
             if coord_files is not None:
                 coords = pd.read_csv(coord_files[vol_idx])
@@ -148,8 +155,8 @@ class ExtractSubvolumes(TomoTwinTool):
                 skip_out_of_bounds=True 
             )
             
-            for subvol in subvols:
-                subvol_file = f"{path_output}/{os.path.basename(vol_file).replace('.mrc', '')}_0XXX_{subtomo_idx}.mrc"
+            for subvol in tqdm.tqdm(subvols, "Extracting subvolumes from volume"):
+                subvol_file = f"{path_output}/{os.path.splitext(os.path.basename(vol_file))[0]}_0XXX_{subtomo_idx}.mrc"
                 with mrcfile.new(subvol_file, overwrite=True) as new_mrc:
                     new_mrc.set_data(subvol)
                 subtomo_idx += 1
