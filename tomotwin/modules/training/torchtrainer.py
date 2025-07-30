@@ -129,11 +129,17 @@ class TorchTrainer(Trainer):
                 print(f"Could not add graph to TensorBoard: {e}")
 
         self.model = self.model.to(self.device)
-        self.optimizer = getattr(optim, optimizer)(
+        
+        optimizer_class = getattr(optim, optimizer)
+    
+        additional_optimizer_params = {"weight_decay": weight_decay}
+        if "Adam" in optimizer_class.__name__:
+            additional_optimizer_params["amsgrad"] = amsgrad
+        
+        self.optimizer = optimizer_class(
             self.model.parameters(),
             lr=self.learning_rate,
-            amsgrad=amsgrad,
-            weight_decay=weight_decay,
+            **additional_optimizer_params
         )
         self.scheduler = ReduceLROnPlateau(
             self.optimizer, mode="min", patience=patience, verbose=True
