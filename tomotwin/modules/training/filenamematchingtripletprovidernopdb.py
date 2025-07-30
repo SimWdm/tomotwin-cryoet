@@ -86,6 +86,10 @@ class FilenameMatchingTripletProviderNoPDB(TripletProvider):
         for lbl in tqdm.tqdm(unique_labels,"Generate triplets (no pdb)"):
             index_same_lbl = np.where(lbl_arr == lbl)[0]
             index_different_lbl = np.where(lbl_arr != lbl)[0]
+            if len(index_different_lbl) == 0:
+                print(f"WARNING: No negative samples for label {lbl} found! Assuming you are running test-time training. Setting negative samples to the same label.")
+                index_different_lbl = index_same_lbl
+            
             if len(index_same_lbl) == 1:
                 continue
             anchor_pos = get_combinations(index_same_lbl)
