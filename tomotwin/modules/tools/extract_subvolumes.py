@@ -139,7 +139,7 @@ class ExtractSubvolumes(TomoTwinTool):
                     vol = mrc.data
             else:
                 raise ValueError(f"Unsupported file format: {vol_file}.")
-                
+                                        
             if coord_files is not None:
                 coords = pd.read_csv(coord_files[vol_idx])
                 coords = coords[["X", "Y", "Z"]]
@@ -158,8 +158,10 @@ class ExtractSubvolumes(TomoTwinTool):
             for subvol in tqdm.tqdm(subvols, "Extracting subvolumes from volume"):
                 subvol_file = f"{path_output}/{os.path.splitext(os.path.basename(vol_file))[0]}_0XXX_{subtomo_idx}.mrc"
                 with mrcfile.new(subvol_file, overwrite=True) as new_mrc:
-                    new_mrc.set_data(subvol)
+                    new_mrc.set_data(-1 * subvol)
                 subtomo_idx += 1
 
         print(f"Wrote {len(os.listdir(path_output))} subvolumes to {path_output}.")
 
+
+# %%
