@@ -364,14 +364,20 @@ class TorchTrainer(Trainer):
             anchor_vol_odd = batch["anchor_odd"]
             full_input = torch.cat([anchor_vol_even], dim=0).to(self.device, non_blocking=True)
             with autocast():
-                decoder_out = self.model.forward(full_input)[1]
+                anchor_vol_even_enc, anchor_vol_even_dec = self.model.forward(full_input)
             decoder_loss = self.decoder_criterion(
-                decoder_out,
-                anchor_vol_odd.to(decoder_out.device, non_blocking=True),
+                anchor_vol_even_dec,
+                anchor_vol_odd.to(anchor_vol_even_dec.device, non_blocking=True),
             )
             loss = (loss + decoder_loss) / 2.0
             losses["decoder_out"] = decoder_loss
             losses["triplet_loss"] = triplet_loss
+            
+        # if mode == "train" and self.train_with_reconstruction_loss and not self.train_with_triplet_loss:
+        #     consistency_target = out[0].clone().detach() 
+        #     consistency_loss = (1-(consistency_target@anchor_vol_even_enc.T).diag()).mean()
+        #     losses["consistency_loss"] = consistency_loss
+        #     loss = ((loss * 2.0) + consistency_loss) / 3.0
         
         losses["loss"] = loss
 
@@ -488,6 +494,7 @@ class TorchTrainer(Trainer):
         running_loss = []
         running_triplet_loss = []
         running_decoder_loss = []
+        running_consistency_loss = []
         
         self.model.train()
         disable_bar = dist.is_initialized() and dist.get_rank() != 0
@@ -510,6 +517,10 @@ class TorchTrainer(Trainer):
             if "decoder_out" in losses:
                 decoder_loss_np = losses["decoder_out"].cpu().detach().numpy()
                 running_decoder_loss.append(decoder_loss_np)
+                
+            if "consistency_loss" in losses:
+                consistency_loss_np = losses["consistency_loss"].cpu().detach().numpy()
+                running_consistency_loss.append(consistency_loss_np)
             
             scaler.scale(loss).backward()
             scaler.step(self.optimizer)
@@ -526,6 +537,8 @@ class TorchTrainer(Trainer):
             out["train_triplet_loss"] = np.mean(running_triplet_loss)
         if "decoder_out" in losses:
             out["train_decoder_loss"] = np.mean(running_decoder_loss)
+        if "consistency_loss" in losses:
+            out["train_consistency_loss"] = np.mean(running_consistency_loss)
         
         return out
 
@@ -585,6 +598,11 @@ class TorchTrainer(Trainer):
                 self.run_if_rank_0(
                     self.writer.add_scalar,
                     "Loss/train_decoder", train_losses["train_decoder_loss"], epoch
+                )
+            if "train_consistency_loss" in train_losses:
+                self.run_if_rank_0(
+                    self.writer.add_scalar,
+                    "Loss/train_consistency", train_losses["train_consistency_loss"], epoch
                 )
 
             # Validation
@@ -749,8 +767,9 @@ class TorchTrainer(Trainer):
                 os.remove(os.path.join(path, "final.pth"))
             os.rename(os.path.join(path, "latest.pth"), os.path.join(path, "final.pth"))
 
-        if self.best_model_loss is not None:
+        if self.best_model_loss is not None and self.loss_improved:
             # The best_model can be None, after a training restart.
+            print(f"Saving best model according to loss")
             self.write_model_to_disk(
                 path,
                 self.best_model_loss,
@@ -759,7 +778,8 @@ class TorchTrainer(Trainer):
                 **kwargs,
             )
 
-        if self.best_model_f1 is not None:
+        if self.best_model_f1 is not None and self.f1_improved:
+            print(f"Saving best model according to f1")
             # The best_model can be None, after a training restart.
             self.write_model_to_disk(
                 path, self.best_model_f1, "best_f1.pth", self.best_epoch_f1, **kwargs
