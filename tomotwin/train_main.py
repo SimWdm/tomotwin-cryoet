@@ -406,10 +406,10 @@ def _main_():
     ########################
     # Create trainer and start training
     ########################
-    if "ttt_checkpoint" in config["network_config"]:
-        print("'ttt_checkpoint' is set in network_config! Setting 'train_with_reconstruction_loss=True' and 'train_with_triplet_loss'=False in tconf.")
-        tconf.train_with_reconstruction_loss = True
-        tconf.train_with_triplet_loss = False
+    # if "ttt_checkpoint" in config["network_config"]:
+    #     print("'ttt_checkpoint' is set in network_config! Setting 'train_with_reconstruction_loss=True' and 'train_with_triplet_loss'=False in tconf.")
+    #     tconf.train_with_reconstruction_loss = True
+    #     tconf.train_with_triplet_loss = False
     
     only_negative_labels = []
     if "only_negative_labels" in config["train_config"]:

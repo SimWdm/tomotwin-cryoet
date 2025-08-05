@@ -116,18 +116,19 @@ class TrainingArgParseUI(TrainingUI):
         
         parser.add_argument(
             "--train_with_triplet_loss",
-            action='store_true',
-            default=True,
-            help="Train the network with the contrastive triplet loss."
+            type=str,
+            choices=["True", "False"],
+            default="True",
+            help="Train with triplet loss"
         )
         
         parser.add_argument(
             "--train_with_reconstruction_loss",
-            action='store_true',
-            default=False,
-            help="Train the network with the reconstruction loss."
+            type=str,
+            choices=["True", "False"],
+            default="False",
+            help="Train with triplet loss"
         )
-        
         parser.add_argument(
             "--exclude_volumes_with_substrings",
             type=str,
@@ -153,8 +154,8 @@ class TrainingArgParseUI(TrainingUI):
         self.distance = args.distance
         self.validvolumes = args.validvolumes
         self.save_after_improvement = args.save_after_improvement
-        self.train_with_reconstruction_loss = args.train_with_reconstruction_loss  
-        self.train_with_triplet_loss = args.train_with_triplet_loss  
+        self.train_with_reconstruction_loss = args.train_with_reconstruction_loss == "True"
+        self.train_with_triplet_loss = args.train_with_triplet_loss == "True"
         self.exclude_volumes_with_substrings = args.exclude_volumes_with_substrings
 
     def get_training_configuration(self) -> TrainingConfiguration:
